@@ -111,30 +111,38 @@ class PhotoService {
     return stats;
   }
 
-  /// Find groups of visually similar photos using perceptual hashing.
-  /// Returns lists where each inner list has 2+ similar photos.
-  Future<List<List<PhotoItem>>> findSimilarGroups(List<PhotoItem> photos) async {
-    if (photos.length < 2) return [];
+  static const int _maxPhotosForSimilarity = 300;
+  static const int _hashBatchSize = 8;
 
-    // Step 1: Compute perceptual hash for each photo
+  Future<List<List<PhotoItem>>> findSimilarGroups(
+    List<PhotoItem> photos, {
+    void Function(int processed, int total)? onProgress,
+  }) async {
+    final limited = photos.length > _maxPhotosForSimilarity
+        ? photos.sublist(0, _maxPhotosForSimilarity)
+        : photos;
+    if (limited.length < 2) return [];
+
+    final total = limited.length;
     final Map<String, int> hashes = {};
 
-    for (final photo in photos) {
-      try {
-        final hash = await _computePerceptualHash(photo);
-        if (hash != 0) {
-          hashes[photo.id] = hash;
-        }
-      } catch (_) {
-        // Skip photos that can't be hashed
+    for (int i = 0; i < total; i += _hashBatchSize) {
+      final end = (i + _hashBatchSize > total) ? total : i + _hashBatchSize;
+      for (int j = i; j < end; j++) {
+        try {
+          final hash = await _computePerceptualHash(limited[j]);
+          if (hash != 0) {
+            hashes[limited[j].id] = hash;
+          }
+        } catch (_) {}
       }
+      onProgress?.call(end, total);
+      await Future.delayed(Duration.zero);
     }
 
-    // Step 2: Group photos with similar hashes (hamming distance <= 10)
     final List<List<PhotoItem>> groups = [];
     final Set<String> grouped = {};
-
-    final photoList = photos.where((p) => hashes.containsKey(p.id)).toList();
+    final photoList = limited.where((p) => hashes.containsKey(p.id)).toList();
 
     for (int i = 0; i < photoList.length; i++) {
       if (grouped.contains(photoList[i].id)) continue;
@@ -146,9 +154,7 @@ class PhotoService {
         if (grouped.contains(photoList[j].id)) continue;
 
         final hash2 = hashes[photoList[j].id]!;
-        final distance = _hammingDistance(hash1, hash2);
-
-        if (distance <= 10) {
+        if (_hammingDistance(hash1, hash2) <= 10) {
           group.add(photoList[j]);
           grouped.add(photoList[j].id);
         }

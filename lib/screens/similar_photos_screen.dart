@@ -17,6 +17,8 @@ class SimilarPhotosScreen extends StatefulWidget {
 class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   List<List<PhotoItem>>? _groups;
   bool _isLoading = true;
+  int _processed = 0;
+  int _total = 0;
 
   @override
   void initState() {
@@ -27,11 +29,25 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   }
 
   Future<void> _findSimilarGroups() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _processed = 0;
+      _total = 0;
+    });
     try {
       final photos = context.read<PhotoProvider>().photos;
       final photoService = PhotoService();
-      final groups = await photoService.findSimilarGroups(photos);
+      final groups = await photoService.findSimilarGroups(
+        photos,
+        onProgress: (processed, total) {
+          if (mounted) {
+            setState(() {
+              _processed = processed;
+              _total = total;
+            });
+          }
+        },
+      );
       if (mounted) {
         setState(() {
           _groups = groups;
@@ -76,17 +92,40 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: AppTheme.primary),
-            SizedBox(height: 16),
-            Text(
-              '正在分析相似照片...',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
-            ),
-          ],
+      final progress = _total > 0 ? _processed / _total : 0.0;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 48),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppTheme.primary),
+              const SizedBox(height: 20),
+              if (_total > 0) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
+                    color: AppTheme.primary,
+                    minHeight: 6,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '正在分析 $_processed / $_total 张照片...',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ] else
+                const Text(
+                  '正在准备分析...',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+                ),
+            ],
+          ),
         ),
       );
     }
