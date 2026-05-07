@@ -83,19 +83,8 @@ class _SwipeScreenState extends State<SwipeScreen> {
           onKeep: () => provider.handleSwipe(SwipeDirection.right),
           onFavorite: () => provider.handleSwipe(SwipeDirection.up),
         ),
-        // Status text
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12, top: 4),
-          child: Text(
-            '已审阅 ${provider.reviewed} · '
-            '剩余 ${provider.remaining} · '
-            '待删除 ${provider.pendingDeleteCount}',
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 13,
-            ),
-          ),
-        ),
+        // Status bar with delete action
+        _buildStatusBar(provider),
       ],
     );
   }
@@ -328,6 +317,159 @@ class _SwipeScreenState extends State<SwipeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatusBar(PhotoProvider provider) {
+    final hasPending = provider.pendingDeleteCount > 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 4, left: 20, right: 20),
+      child: Row(
+        children: [
+          // Stats text
+          Expanded(
+            child: Text(
+              '已审阅 ${provider.reviewed} · 剩余 ${provider.remaining}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          // Delete confirm button (always visible when there are pending deletes)
+          if (hasPending)
+            GestureDetector(
+              onTap: () => _showDeleteBottomSheet(context, provider),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.danger,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.delete_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      '待删除 ${provider.pendingDeleteCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteBottomSheet(BuildContext context, PhotoProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final count = provider.pendingDeleteCount;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Icon + count
+                Icon(
+                  Icons.delete_sweep_rounded,
+                  size: 48,
+                  color: AppTheme.danger.withValues(alpha: 0.8),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '$count 张照片待删除',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '确认后将从相册中永久移除这些照片',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Confirm delete button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await context.read<PhotoProvider>().confirmDeletes();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('已删除 $count 张照片'),
+                            backgroundColor: AppTheme.success,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.delete_forever_rounded),
+                    label: Text('确认删除 $count 张'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.danger,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Cancel button
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text(
+                      '继续审阅',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
