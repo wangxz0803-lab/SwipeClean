@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/photo_item.dart';
 import '../theme/app_theme.dart';
@@ -233,10 +234,32 @@ class _SwipeCardState extends State<SwipeCard>
           );
         }
 
-        return Image.memory(
-          snapshot.data!,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
+        final data = snapshot.data!;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Bottom layer: stretched/cropped background
+            Image.memory(
+              data,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            ),
+            // Middle layer: blur + dark overlay
+            ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                child: Container(color: const Color(0x40000000)),
+              ),
+            ),
+            // Top layer: full photo without cropping
+            Center(
+              child: Image.memory(
+                data,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+              ),
+            ),
+          ],
         );
       },
     );

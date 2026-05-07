@@ -31,7 +31,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
     try {
       final photos = context.read<PhotoProvider>().photos;
       final photoService = PhotoService();
-      final groups = photoService.findSimilarGroups(photos);
+      final groups = await photoService.findSimilarGroups(photos);
       if (mounted) {
         setState(() {
           _groups = groups;

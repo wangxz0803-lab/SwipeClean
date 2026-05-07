@@ -49,6 +49,16 @@ class PhotoProvider extends ChangeNotifier {
     }
     _monthlyStats = await _photoService.getMonthlyStats();
     await loadPhotos();
+
+    // Resume from last position
+    final lastId = _storageService.getLastPosition();
+    if (lastId != null) {
+      final idx = _photos.indexWhere((p) => p.id == lastId);
+      if (idx > 0) {
+        _currentIndex = idx;
+      }
+    }
+
     notifyListeners();
   }
 
@@ -137,6 +147,10 @@ class PhotoProvider extends ChangeNotifier {
     await _storageService.updateStreak();
 
     _currentIndex++;
+
+    if (currentPhoto != null) {
+      await _storageService.saveLastPosition(currentPhoto!.id);
+    }
 
     // Preload more if near the end
     if (_hasMore && _photos.length - _currentIndex < 10) {

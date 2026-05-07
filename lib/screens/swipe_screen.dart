@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/swipe_action.dart';
@@ -373,11 +374,16 @@ class _SwipeScreenState extends State<SwipeScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         final count = provider.pendingDeleteCount;
+        final pendingPhotos = provider.history
+            .where((r) => r.action == ActionType.delete)
+            .map((r) => r.photo)
+            .toList();
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
@@ -411,13 +417,61 @@ class _SwipeScreenState extends State<SwipeScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '确认后将从相册中永久移除这些照片',
+                  '确认后将从相册中永久移除',
                   style: TextStyle(
                     fontSize: 14,
                     color: AppTheme.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                // Thumbnail preview grid
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 6,
+                      mainAxisSpacing: 6,
+                    ),
+                    itemCount: pendingPhotos.length,
+                    itemBuilder: (context, index) {
+                      final photo = pendingPhotos[index];
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: FutureBuilder<Uint8List?>(
+                          future: photo.loadThumbnail(size: 150),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                    ConnectionState.done &&
+                                snapshot.data != null) {
+                              return Image.memory(
+                                snapshot.data!,
+                                fit: BoxFit.cover,
+                              );
+                            }
+                            return Container(
+                              color: Colors.grey.shade200,
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
                 // Confirm delete button
                 SizedBox(
                   width: double.infinity,

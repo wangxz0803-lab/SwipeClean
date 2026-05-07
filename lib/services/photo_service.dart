@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:photo_manager/photo_manager.dart';
 import '../models/photo_item.dart';
 
@@ -110,35 +111,112 @@ class PhotoService {
     return stats;
   }
 
-  /// Find groups of similar photos (taken within 3 seconds of each other).
+  /// Find groups of visually similar photos using perceptual hashing.
   /// Returns lists where each inner list has 2+ similar photos.
-  List<List<PhotoItem>> findSimilarGroups(List<PhotoItem> photos) {
+  Future<List<List<PhotoItem>>> findSimilarGroups(List<PhotoItem> photos) async {
     if (photos.length < 2) return [];
 
-    // Sort by creation date
-    final sorted = List<PhotoItem>.from(photos)
-      ..sort((a, b) => a.createDate.compareTo(b.createDate));
+    // Step 1: Compute perceptual hash for each photo
+    final Map<String, int> hashes = {};
 
-    final List<List<PhotoItem>> groups = [];
-    List<PhotoItem> currentGroup = [sorted.first];
-
-    for (int i = 1; i < sorted.length; i++) {
-      final diff = sorted[i].createDate.difference(sorted[i - 1].createDate).inSeconds.abs();
-      if (diff <= 3) {
-        currentGroup.add(sorted[i]);
-      } else {
-        if (currentGroup.length >= 2) {
-          groups.add(List.from(currentGroup));
+    for (final photo in photos) {
+      try {
+        final hash = await _computePerceptualHash(photo);
+        if (hash != 0) {
+          hashes[photo.id] = hash;
         }
-        currentGroup = [sorted[i]];
+      } catch (_) {
+        // Skip photos that can't be hashed
       }
     }
 
-    // Don't forget the last group
-    if (currentGroup.length >= 2) {
-      groups.add(List.from(currentGroup));
+    // Step 2: Group photos with similar hashes (hamming distance <= 10)
+    final List<List<PhotoItem>> groups = [];
+    final Set<String> grouped = {};
+
+    final photoList = photos.where((p) => hashes.containsKey(p.id)).toList();
+
+    for (int i = 0; i < photoList.length; i++) {
+      if (grouped.contains(photoList[i].id)) continue;
+
+      final List<PhotoItem> group = [photoList[i]];
+      final hash1 = hashes[photoList[i].id]!;
+
+      for (int j = i + 1; j < photoList.length; j++) {
+        if (grouped.contains(photoList[j].id)) continue;
+
+        final hash2 = hashes[photoList[j].id]!;
+        final distance = _hammingDistance(hash1, hash2);
+
+        if (distance <= 10) {
+          group.add(photoList[j]);
+          grouped.add(photoList[j].id);
+        }
+      }
+
+      if (group.length >= 2) {
+        groups.add(group);
+        grouped.add(photoList[i].id);
+      }
     }
 
     return groups;
+  }
+
+  /// Compute a 64-bit perceptual hash (average hash) for a photo.
+  /// Resizes to 8x8 grayscale and compares each pixel to the mean.
+  Future<int> _computePerceptualHash(PhotoItem photo) async {
+    // Get a small thumbnail
+    final bytes = await photo.asset.thumbnailDataWithSize(
+      const ThumbnailSize(32, 32),
+      quality: 50,
+    );
+    if (bytes == null) return 0;
+
+    // Decode to raw pixels using dart:ui
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 8,
+      targetHeight: 8,
+    );
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return 0;
+
+    final pixels = byteData.buffer.asUint8List();
+
+    // Convert to grayscale values
+    final List<int> gray = [];
+    for (int i = 0; i < pixels.length; i += 4) {
+      final r = pixels[i];
+      final g = pixels[i + 1];
+      final b = pixels[i + 2];
+      gray.add((r * 299 + g * 587 + b * 114) ~/ 1000);
+    }
+
+    // Compute average
+    final avg = gray.reduce((a, b) => a + b) / gray.length;
+
+    // Build hash: each bit = 1 if pixel > average
+    int hash = 0;
+    for (int i = 0; i < gray.length && i < 64; i++) {
+      if (gray[i] > avg) {
+        hash |= (1 << i);
+      }
+    }
+
+    return hash;
+  }
+
+  /// Count differing bits between two hashes.
+  int _hammingDistance(int hash1, int hash2) {
+    int xor = hash1 ^ hash2;
+    int count = 0;
+    while (xor != 0) {
+      count += xor & 1;
+      xor >>= 1;
+    }
+    return count;
   }
 }

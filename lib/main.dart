@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'services/notification_service.dart';
 import 'services/photo_service.dart';
 import 'services/storage_service.dart';
 import 'providers/photo_provider.dart';
@@ -13,6 +14,8 @@ void main() async {
 
   final storageService = StorageService();
   await storageService.init();
+  await NotificationService.init();
+  await NotificationService.scheduleDailyReminder();
   final photoService = PhotoService();
 
   runApp(
