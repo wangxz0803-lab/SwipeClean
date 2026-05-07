@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/stats_provider.dart';
+import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 
 class StatsScreen extends StatefulWidget {
@@ -42,10 +43,14 @@ class _StatsScreenState extends State<StatsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Big number: total reviewed
+                _buildLevelCard(stats),
+                const SizedBox(height: 16),
+                _buildDailyGoalCard(stats),
+                const SizedBox(height: 16),
                 _buildHeroStat(stats),
-                const SizedBox(height: 20),
-                // Space saved & keep rate row
+                const SizedBox(height: 16),
+                _buildStorageBreakdown(stats),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(child: _buildSpaceSaved(stats)),
@@ -54,10 +59,8 @@ class _StatsScreenState extends State<StatsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Streak card
                 _buildStreakCard(stats),
                 const SizedBox(height: 24),
-                // Grid of 4 stat tiles
                 const Text(
                   '详细统计',
                   style: TextStyle(
@@ -73,6 +76,259 @@ class _StatsScreenState extends State<StatsScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildLevelCard(StatsProvider stats) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6C5CE7), Color(0xFFA29BFE)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    'Lv.${stats.level}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stats.levelTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${stats.totalXp} XP',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (stats.level < StorageService.levelTitles.length - 1)
+                Text(
+                  '${stats.nextLevelXp} XP',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 12,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: stats.levelProgress,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white,
+              minHeight: 6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyGoalCard(StatsProvider stats) {
+    final reached = stats.dailyGoalReached;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: reached ? Border.all(color: Colors.orange.withValues(alpha: 0.3), width: 1.5) : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: (reached ? Colors.orange : AppTheme.primary).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              reached ? Icons.emoji_events_rounded : Icons.flag_rounded,
+              color: reached ? Colors.orange : AppTheme.primary,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reached ? '今日目标已达成!' : '今日清理目标',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: reached ? Colors.orange : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: stats.dailyProgress,
+                    backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                    color: reached ? Colors.orange : AppTheme.primary,
+                    minHeight: 5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '${stats.todayReviewed}/${stats.dailyGoal}',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: reached ? Colors.orange : AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStorageBreakdown(StatsProvider stats) {
+    final total = stats.totalReviewed;
+    if (total == 0) return const SizedBox.shrink();
+
+    final deletedPct = stats.totalDeleted / total;
+    final keptPct = stats.totalKept / total;
+    final favPct = stats.totalFavorited / total;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '照片去向',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 12,
+              child: Row(
+                children: [
+                  if (deletedPct > 0)
+                    Expanded(
+                      flex: (deletedPct * 1000).round(),
+                      child: Container(color: AppTheme.danger),
+                    ),
+                  if (keptPct > 0)
+                    Expanded(
+                      flex: (keptPct * 1000).round(),
+                      child: Container(color: AppTheme.success),
+                    ),
+                  if (favPct > 0)
+                    Expanded(
+                      flex: (favPct * 1000).round(),
+                      child: Container(color: AppTheme.favorite),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildLegend('删除', AppTheme.danger, '${(deletedPct * 100).round()}%'),
+              _buildLegend('保留', AppTheme.success, '${(keptPct * 100).round()}%'),
+              _buildLegend('收藏', AppTheme.favorite, '${(favPct * 100).round()}%'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegend(String label, Color color, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$label $value',
+          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+        ),
+      ],
     );
   }
 

@@ -17,9 +17,15 @@ class SwipeScreen extends StatefulWidget {
 }
 
 class _SwipeScreenState extends State<SwipeScreen> {
+  OverlayEntry? _xpOverlay;
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PhotoProvider>();
+
+    if (provider.lastXpGain > 0 && provider.reviewed > 0) {
+      _showXpPopup(provider.lastXpGain, provider.lastLevelUp);
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -27,6 +33,23 @@ class _SwipeScreenState extends State<SwipeScreen> {
         child: _buildBody(provider),
       ),
     );
+  }
+
+  void _showXpPopup(int xp, int levelUp) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _xpOverlay?.remove();
+      _xpOverlay = OverlayEntry(
+        builder: (ctx) => _XpPopup(
+          xp: xp,
+          levelUp: levelUp,
+          onDone: () {
+            _xpOverlay?.remove();
+            _xpOverlay = null;
+          },
+        ),
+      );
+      Overlay.of(context).insert(_xpOverlay!);
+    });
   }
 
   Widget _buildBody(PhotoProvider provider) {
@@ -91,27 +114,110 @@ class _SwipeScreenState extends State<SwipeScreen> {
   }
 
   Widget _buildTopBar(PhotoProvider provider) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 8, 12, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: MonthPicker(
+                  monthlyStats: provider.monthlyStats,
+                  selected: null,
+                  onSelect: (monthKey) {
+                    provider.selectMonth(monthKey);
+                  },
+                ),
+              ),
+              GestureDetector(
+                onTap: () => provider.toggleShuffleMode(),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: provider.shuffleMode
+                        ? AppTheme.primary
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.shuffle_rounded,
+                    size: 18,
+                    color: provider.shuffleMode
+                        ? Colors.white
+                        : AppTheme.primary,
+                  ),
+                ),
+              ),
+              ProgressRing(
+                progress: provider.progress,
+                reviewed: provider.reviewed,
+                total: provider.photos.length,
+                size: 56,
+                strokeWidth: 4,
+              ),
+            ],
+          ),
+        ),
+        _buildDailyGoalBar(provider),
+      ],
+    );
+  }
+
+  Widget _buildDailyGoalBar(PhotoProvider provider) {
+    final today = provider.todayReviewed;
+    final goal = 20;
+    final reached = provider.dailyGoalReached;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: Row(
         children: [
-          // Month picker
-          Expanded(
-            child: MonthPicker(
-              monthlyStats: provider.monthlyStats,
-              selected: null, // TODO: track selected month in state
-              onSelect: (monthKey) {
-                provider.selectMonth(monthKey);
-              },
+          Icon(
+            reached ? Icons.emoji_events_rounded : Icons.flag_rounded,
+            size: 16,
+            color: reached ? Colors.orange : AppTheme.textSecondary,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            reached ? '今日目标已达成!' : '今日 $today/$goal',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: reached ? Colors.orange : AppTheme.textSecondary,
             ),
           ),
-          // Progress ring (small)
-          ProgressRing(
-            progress: provider.progress,
-            reviewed: provider.reviewed,
-            total: provider.photos.length,
-            size: 56,
-            strokeWidth: 4,
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: provider.dailyProgress,
+                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                color: reached ? Colors.orange : AppTheme.primary,
+                minHeight: 4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Lv.${provider.level} ${provider.levelTitle}',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.primary,
+              ),
+            ),
           ),
         ],
       ),
@@ -546,6 +652,86 @@ class _SwipeScreenState extends State<SwipeScreen> {
             child: const Text('删除'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _XpPopup extends StatefulWidget {
+  final int xp;
+  final int levelUp;
+  final VoidCallback onDone;
+
+  const _XpPopup({required this.xp, required this.levelUp, required this.onDone});
+
+  @override
+  State<_XpPopup> createState() => _XpPopupState();
+}
+
+class _XpPopupState extends State<_XpPopup> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacity;
+  late Animation<Offset> _offset;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+    _opacity = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: 1), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: 1, end: 1), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1, end: 0), weight: 30),
+    ]).animate(_controller);
+    _offset = Tween<Offset>(
+      begin: const Offset(0, 0),
+      end: const Offset(0, -40),
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _controller.forward().then((_) => widget.onDone());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: MediaQuery.of(context).size.height * 0.35,
+      left: 0,
+      right: 0,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: _offset.value,
+            child: Opacity(opacity: _opacity.value, child: child),
+          );
+        },
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              widget.levelUp > 0
+                  ? '+${widget.xp} XP  Level UP!'
+                  : '+${widget.xp} XP',
+              style: TextStyle(
+                color: widget.levelUp > 0 ? Colors.amber : Colors.white,
+                fontSize: widget.levelUp > 0 ? 18 : 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

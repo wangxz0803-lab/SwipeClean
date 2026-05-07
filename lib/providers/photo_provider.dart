@@ -19,6 +19,9 @@ class PhotoProvider extends ChangeNotifier {
   int _currentPage = 0;
   bool _hasMore = true;
   Map<String, int> _monthlyStats = {};
+  bool _shuffleMode = false;
+  int _lastXpGain = 0;
+  int _lastLevelUp = 0;
 
   PhotoProvider(this._photoService, this._storageService);
 
@@ -38,6 +41,15 @@ class PhotoProvider extends ChangeNotifier {
   List<SwipeRecord> get history => _history;
   String? get selectedMonth => _selectedMonth;
   bool get hasMore => _hasMore;
+  bool get shuffleMode => _shuffleMode;
+  int get lastXpGain => _lastXpGain;
+  int get lastLevelUp => _lastLevelUp;
+  int get todayReviewed => _storageService.todayReviewed;
+  double get dailyProgress => _storageService.dailyProgress;
+  bool get dailyGoalReached => _storageService.dailyGoalReached;
+  int get totalXp => _storageService.totalXp;
+  int get level => _storageService.level;
+  String get levelTitle => _storageService.levelTitle;
 
   // --- Init ---
 
@@ -109,6 +121,18 @@ class PhotoProvider extends ChangeNotifier {
     loadPhotos();
   }
 
+  // --- Shuffle mode ---
+
+  void toggleShuffleMode() {
+    _shuffleMode = !_shuffleMode;
+    if (_shuffleMode) {
+      final remaining = _photos.sublist(_currentIndex);
+      remaining.shuffle(Random());
+      _photos = [..._photos.sublist(0, _currentIndex), ...remaining];
+    }
+    notifyListeners();
+  }
+
   // --- Swipe handling ---
 
   Future<void> handleSwipe(SwipeDirection direction) async {
@@ -145,6 +169,11 @@ class PhotoProvider extends ChangeNotifier {
 
     await _storageService.incrementReviewed();
     await _storageService.updateStreak();
+    await _storageService.incrementDailyReviewed();
+
+    final xpMap = {ActionType.delete: 10, ActionType.keep: 5, ActionType.favorite: 15};
+    _lastXpGain = xpMap[action]!;
+    _lastLevelUp = await _storageService.addXp(_lastXpGain);
 
     _currentIndex++;
 
@@ -181,6 +210,7 @@ class PhotoProvider extends ChangeNotifier {
     }
 
     await _storageService.decrementReviewed();
+    await _storageService.decrementDailyReviewed();
     _currentIndex--;
     notifyListeners();
   }

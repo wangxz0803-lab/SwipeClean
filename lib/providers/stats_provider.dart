@@ -16,6 +16,17 @@ class StatsProvider extends ChangeNotifier {
   String get spaceSavedFormatted => StorageService.formatBytes(_storageService.spaceSavedBytes);
   int get currentStreak => _storageService.currentStreak;
 
+  int get totalXp => _storageService.totalXp;
+  int get level => _storageService.level;
+  String get levelTitle => _storageService.levelTitle;
+  double get levelProgress => _storageService.levelProgress;
+  int get nextLevelXp => _storageService.nextLevelXp;
+  int get currentLevelXp => _storageService.currentLevelXp;
+  int get todayReviewed => _storageService.todayReviewed;
+  int get dailyGoal => StorageService.dailyGoal;
+  double get dailyProgress => _storageService.dailyProgress;
+  bool get dailyGoalReached => _storageService.dailyGoalReached;
+
   int get keepRate {
     if (totalReviewed == 0) return 0;
     return (totalKept / totalReviewed * 100).round();

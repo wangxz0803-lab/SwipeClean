@@ -332,7 +332,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         style: TextStyle(fontSize: 16, color: AppTheme.textPrimary),
       ),
       trailing: Text(
-        'v1.0.0',
+        'v1.2.0',
         style: TextStyle(
           fontSize: 14,
           color: AppTheme.textSecondary,
