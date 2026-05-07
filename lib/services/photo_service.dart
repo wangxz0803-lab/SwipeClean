@@ -115,7 +115,7 @@ class PhotoService {
 
   Future<List<List<PhotoItem>>> findSimilarGroups(
     List<PhotoItem> photos, {
-    void Function(int processed, int total)? onProgress,
+    void Function(int processed, int total, String phase)? onProgress,
     bool Function()? shouldCancel,
   }) async {
     final limited = photos.length > _maxPhotosForSimilarity
@@ -134,7 +134,7 @@ class PhotoService {
           hashes[limited[i].id] = hash;
         }
       } catch (_) {}
-      onProgress?.call(i + 1, total);
+      onProgress?.call(i + 1, total, '正在分析照片');
       await Future.delayed(const Duration(milliseconds: 50));
     }
 
@@ -162,6 +162,15 @@ class PhotoService {
         groups.add(group);
         grouped.add(photoList[i].id);
       }
+    }
+
+    // 预加载分组照片缩略图，逐张加载避免并发堵死平台线程
+    final allGroupPhotos = groups.expand((g) => g).toList();
+    for (int i = 0; i < allGroupPhotos.length; i++) {
+      if (shouldCancel?.call() == true) return groups;
+      await allGroupPhotos[i].loadThumbnail();
+      onProgress?.call(i + 1, allGroupPhotos.length, '正在加载预览');
+      await Future.delayed(const Duration(milliseconds: 30));
     }
 
     return groups;

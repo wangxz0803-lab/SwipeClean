@@ -20,6 +20,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   bool _cancelled = false;
   int _processed = 0;
   int _total = 0;
+  String _phase = '';
 
   @override
   void initState() {
@@ -41,17 +42,19 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
       _cancelled = false;
       _processed = 0;
       _total = 0;
+      _phase = '分析中';
     });
     try {
       final photos = context.read<PhotoProvider>().photos;
       final photoService = PhotoService();
       final groups = await photoService.findSimilarGroups(
         photos,
-        onProgress: (processed, total) {
+        onProgress: (processed, total, phase) {
           if (mounted && !_cancelled) {
             setState(() {
               _processed = processed;
               _total = total;
+              _phase = phase;
             });
           }
         },
@@ -122,7 +125,7 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '正在分析 $_processed / $_total 张照片...',
+                  '$_phase $_processed / $_total',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 14,
