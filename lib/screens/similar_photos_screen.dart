@@ -17,6 +17,7 @@ class SimilarPhotosScreen extends StatefulWidget {
 class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
   List<List<PhotoItem>>? _groups;
   bool _isLoading = true;
+  bool _cancelled = false;
   int _processed = 0;
   int _total = 0;
 
@@ -28,9 +29,16 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _cancelled = true;
+    super.dispose();
+  }
+
   Future<void> _findSimilarGroups() async {
     setState(() {
       _isLoading = true;
+      _cancelled = false;
       _processed = 0;
       _total = 0;
     });
@@ -40,22 +48,23 @@ class _SimilarPhotosScreenState extends State<SimilarPhotosScreen> {
       final groups = await photoService.findSimilarGroups(
         photos,
         onProgress: (processed, total) {
-          if (mounted) {
+          if (mounted && !_cancelled) {
             setState(() {
               _processed = processed;
               _total = total;
             });
           }
         },
+        shouldCancel: () => _cancelled,
       );
-      if (mounted) {
+      if (mounted && !_cancelled) {
         setState(() {
           _groups = groups;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_cancelled) {
         setState(() {
           _groups = [];
           _isLoading = false;

@@ -111,12 +111,12 @@ class PhotoService {
     return stats;
   }
 
-  static const int _maxPhotosForSimilarity = 300;
-  static const int _hashBatchSize = 8;
+  static const int _maxPhotosForSimilarity = 200;
 
   Future<List<List<PhotoItem>>> findSimilarGroups(
     List<PhotoItem> photos, {
     void Function(int processed, int total)? onProgress,
+    bool Function()? shouldCancel,
   }) async {
     final limited = photos.length > _maxPhotosForSimilarity
         ? photos.sublist(0, _maxPhotosForSimilarity)
@@ -126,18 +126,16 @@ class PhotoService {
     final total = limited.length;
     final Map<String, int> hashes = {};
 
-    for (int i = 0; i < total; i += _hashBatchSize) {
-      final end = (i + _hashBatchSize > total) ? total : i + _hashBatchSize;
-      for (int j = i; j < end; j++) {
-        try {
-          final hash = await _computePerceptualHash(limited[j]);
-          if (hash != 0) {
-            hashes[limited[j].id] = hash;
-          }
-        } catch (_) {}
-      }
-      onProgress?.call(end, total);
-      await Future.delayed(Duration.zero);
+    for (int i = 0; i < total; i++) {
+      if (shouldCancel?.call() == true) return [];
+      try {
+        final hash = await _computePerceptualHash(limited[i]);
+        if (hash != 0) {
+          hashes[limited[i].id] = hash;
+        }
+      } catch (_) {}
+      onProgress?.call(i + 1, total);
+      await Future.delayed(const Duration(milliseconds: 50));
     }
 
     final List<List<PhotoItem>> groups = [];
@@ -172,14 +170,12 @@ class PhotoService {
   /// Compute a 64-bit perceptual hash (average hash) for a photo.
   /// Resizes to 8x8 grayscale and compares each pixel to the mean.
   Future<int> _computePerceptualHash(PhotoItem photo) async {
-    // Get a small thumbnail
     final bytes = await photo.asset.thumbnailDataWithSize(
       const ThumbnailSize(32, 32),
       quality: 50,
     );
     if (bytes == null) return 0;
 
-    // Decode to raw pixels using dart:ui
     final codec = await ui.instantiateImageCodec(
       bytes,
       targetWidth: 8,
@@ -188,30 +184,25 @@ class PhotoService {
     final frame = await codec.getNextFrame();
     final image = frame.image;
     final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    image.dispose();
     if (byteData == null) return 0;
 
     final pixels = byteData.buffer.asUint8List();
-
-    // Convert to grayscale values
-    final List<int> gray = [];
-    for (int i = 0; i < pixels.length; i += 4) {
-      final r = pixels[i];
-      final g = pixels[i + 1];
-      final b = pixels[i + 2];
-      gray.add((r * 299 + g * 587 + b * 114) ~/ 1000);
+    final int pixelCount = pixels.length ~/ 4;
+    int sum = 0;
+    final gray = List<int>.filled(pixelCount, 0);
+    for (int i = 0; i < pixelCount; i++) {
+      final off = i * 4;
+      final v = (pixels[off] * 299 + pixels[off + 1] * 587 + pixels[off + 2] * 114) ~/ 1000;
+      gray[i] = v;
+      sum += v;
     }
 
-    // Compute average
-    final avg = gray.reduce((a, b) => a + b) / gray.length;
-
-    // Build hash: each bit = 1 if pixel > average
+    final avg = sum / pixelCount;
     int hash = 0;
-    for (int i = 0; i < gray.length && i < 64; i++) {
-      if (gray[i] > avg) {
-        hash |= (1 << i);
-      }
+    for (int i = 0; i < pixelCount && i < 64; i++) {
+      if (gray[i] > avg) hash |= (1 << i);
     }
-
     return hash;
   }
 
